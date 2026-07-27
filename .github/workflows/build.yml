@@ -1,67 +1,179 @@
-name: CI & Release
+name: CI & Publish
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
-    outputs:
-      project_version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
+
+      - name: Determine release type
+        id: release
+        shell: bash
+        run: |
+          MESSAGE="$(git log -1 --pretty=%B)"
+          BETA_COUNT=$(grep -io '\[beta\]' <<< "$MESSAGE" | wc -l || true)
+          RELEASE_COUNT=$(grep -io '\[release\]' <<< "$MESSAGE" | wc -l || true)
+
+          if [[ "$BETA_COUNT" -gt 0 && "$RELEASE_COUNT" -gt 0 ]]; then
+            echo 'A release commit must contain either [beta] or [release], not both.' >&2
+            exit 1
+          fi
+
+          if [[ "$BETA_COUNT" -gt 0 ]]; then
+            echo 'type=beta' >> "$GITHUB_OUTPUT"
+          elif [[ "$RELEASE_COUNT" -gt 0 ]]; then
+            echo 'type=release' >> "$GITHUB_OUTPUT"
+          else
+            echo 'type=none' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get project version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          if [[ "$VERSION" == *-SNAPSHOT ]]; then
+            echo 'Release versions cannot end with -SNAPSHOT.' >&2
+            exit 1
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        if: steps.release.outputs.type != 'none'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          awk -v version="$VERSION" '
+            $0 == "## [" version "]" { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [[ ! -s release-notes.md ]]; then
+            echo "CHANGELOG.md must contain a non-empty ## [$VERSION] section before publishing." >&2
+            exit 1
+          fi
 
       - name: Build with Maven
         run: mvn -B package --file pom.xml
 
-      - name: Get Maven Version
-        id: get_version
-        run: |
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          CLEAN_VERSION=${VERSION/-SNAPSHOT/}
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          FINAL_VERSION="${CLEAN_VERSION}-${SHORT_SHA}"
-          echo "version=$FINAL_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Upload all artifacts
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: xconomy-jars
+          name: xconomy-${{ steps.version.outputs.value }}
           path: |
-            XConomy-Bukkit/target/*.jar
-            XConomy-Sponge7/target/*.jar
-            XConomy-Sponge8/target/*.jar
-            XConomy-Paper/target/*.jar
-            XConomy-Core/target/*.jar
+            XConomy-Bukkit/target/XConomy-Bukkit-${{ steps.version.outputs.value }}.jar
+            XConomy-Paper/target/XConomy-Paper-${{ steps.version.outputs.value }}.jar
+            XConomy-Sponge7/target/XConomy-Sponge7-${{ steps.version.outputs.value }}.jar
+            XConomy-Sponge8/target/XConomy-Sponge8-${{ steps.version.outputs.value }}.jar
+            XConomy-Core/target/XConomy-Core-${{ steps.version.outputs.value }}.jar
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
+      - name: Publish GitHub release
+        if: steps.release.outputs.type != 'none'
+        uses: Kira-NT/mc-publish@v3
         with:
-          name: xconomy-jars
-          path: ./jars
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-tag: v${{ steps.version.outputs.value }}
+          github-prerelease: ${{ steps.release.outputs.type == 'beta' }}
+          github-generate-changelog: false
+          name: XConomy ${{ steps.version.outputs.value }}
+          version: ${{ steps.version.outputs.value }}
+          changelog-file: release-notes.md
+          files: |
+            XConomy-Bukkit/target/XConomy-Bukkit-${{ steps.version.outputs.value }}.jar
+            XConomy-Paper/target/XConomy-Paper-${{ steps.version.outputs.value }}.jar
+            XConomy-Sponge7/target/XConomy-Sponge7-${{ steps.version.outputs.value }}.jar
+            XConomy-Sponge8/target/XConomy-Sponge8-${{ steps.version.outputs.value }}.jar
+            XConomy-Core/target/XConomy-Core-${{ steps.version.outputs.value }}.jar
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Publish Bukkit version to Modrinth
+        if: steps.release.outputs.type != 'none'
+        uses: Kira-NT/mc-publish@v3
         with:
-          tag_name: v${{ needs.build.outputs.project_version }}
-          name: Release v${{ needs.build.outputs.project_version }}
-          files: ./jars/**/*.jar
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          modrinth-id: UdMN9hv5
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          name: XConomy-Bukkit-${{ steps.version.outputs.value }}
+          version: XConomy-Bukkit-${{ steps.version.outputs.value }}
+          version-type: ${{ steps.release.outputs.type }}
+          changelog-file: release-notes.md
+          files: XConomy-Bukkit/target/XConomy-Bukkit-${{ steps.version.outputs.value }}.jar
+          loaders: |
+            bukkit
+            spigot
+          environment: server
+          game-versions: |
+            >=1.20
+          game-version-filter: releases
+
+      - name: Publish Paper version to Modrinth
+        if: steps.release.outputs.type != 'none'
+        uses: Kira-NT/mc-publish@v3
+        with:
+          modrinth-id: UdMN9hv5
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          name: XConomy-Paper-${{ steps.version.outputs.value }}
+          version: XConomy-Paper-${{ steps.version.outputs.value }}
+          version-type: ${{ steps.release.outputs.type }}
+          changelog-file: release-notes.md
+          files: XConomy-Paper/target/XConomy-Paper-${{ steps.version.outputs.value }}.jar
+          loaders: |
+            folia
+            paper
+            purpur
+          environment: server
+          game-versions: |
+            >=1.20
+          game-version-filter: releases
+
+      - name: Publish Sponge 7 version to Modrinth
+        if: steps.release.outputs.type != 'none'
+        uses: Kira-NT/mc-publish@v3
+        with:
+          modrinth-id: UdMN9hv5
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          name: XConomy-Sponge7-${{ steps.version.outputs.value }}
+          version: XConomy-Sponge7-${{ steps.version.outputs.value }}
+          version-type: ${{ steps.release.outputs.type }}
+          changelog-file: release-notes.md
+          files: XConomy-Sponge7/target/XConomy-Sponge7-${{ steps.version.outputs.value }}.jar
+          loaders: sponge
+          environment: server
+          game-versions: |
+            >=1.20
+          game-version-filter: releases
+
+      - name: Publish Sponge 8 version to Modrinth
+        if: steps.release.outputs.type != 'none'
+        uses: Kira-NT/mc-publish@v3
+        with:
+          modrinth-id: UdMN9hv5
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          name: XConomy-Sponge8-${{ steps.version.outputs.value }}
+          version: XConomy-Sponge8-${{ steps.version.outputs.value }}
+          version-type: ${{ steps.release.outputs.type }}
+          changelog-file: release-notes.md
+          files: XConomy-Sponge8/target/XConomy-Sponge8-${{ steps.version.outputs.value }}.jar
+          loaders: sponge
+          environment: server
+          game-versions: |
+            >=1.20
+          game-version-filter: releases

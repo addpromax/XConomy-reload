@@ -94,6 +94,7 @@
                             <include>com.zaxxer:*</include>
                             <include>redis.clients:jedis</include>
                             <include>org.apache.commons:commons-pool2</include>
+                            <include>com.google.code.gson:gson</include>
                             <include>net.kyori:*</include>
                             <include>me.yic:XConomy-Core</include>
                         </includes>
@@ -114,6 +115,10 @@
                         <relocation>
                             <pattern>org.apache.commons</pattern>
                             <shadedPattern>me.yic.xc_libs.pool2</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>com.google.gson</pattern>
+                            <shadedPattern>me.yic.xc_libs.gson</shadedPattern>
                         </relocation>
                         <relocation>
                             <pattern>net.kyori.adventure</pattern>
@@ -197,6 +202,12 @@
             <groupId>net.kyori</groupId>
             <artifactId>adventure-text-serializer-legacy</artifactId>
             <version>5.2.0</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
             <scope>compile</scope>
         </dependency>
         <!--Enterprise-->

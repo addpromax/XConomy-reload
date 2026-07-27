@@ -19,9 +19,14 @@
 package me.yic.xconomy.listeners;
 
 import me.yic.xconomy.XConomyLoad;
+import me.yic.xconomy.adapter.comp.CChat;
 import me.yic.xconomy.adapter.comp.CPlayer;
 import me.yic.xconomy.lang.MessagesManager;
 import me.yic.xconomy.task.Updater;
+import net.md_5.bungee.api.ChatColor;
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -43,23 +48,22 @@ public class ConnectionListeners implements Listener {
         CPlayer a = new CPlayer(event.getPlayer());
         PlayerConnection.onJoin(a);
 
-        if (a.isOp()) {
-            notifyUpdate(a);
+        if (a.isOp() || a.hasPermission("xconomy.admin.op")) {
+            notifyUpdate(event.getPlayer());
         }
     }
 
 
-    private void notifyUpdate(CPlayer player) {
+    private void notifyUpdate(Player player) {
         if (!(XConomyLoad.Config.CHECK_UPDATE & Updater.old)) {
             return;
         }
-        player.sendMessage("<white>[XConomy]<aqua>" + MessagesManager.systemMessage("发现新版本 ") + Updater.newVersion);
-        player.sendMessage("<white>[XConomy]<green>https://www.spigotmc.org/resources/xconomy.75669/");
-
-        if (XConomyLoad.Config.LANGUAGE.equalsIgnoreCase("Chinese")
-                | XConomyLoad.Config.LANGUAGE.equalsIgnoreCase("ChineseTW")) {
-            player.sendMessage("<white>[XConomy]<green>https://www.mcbbs.net/thread-962904-1-1.html");
-        }
+        player.sendMessage(CChat.toLegacy("<white>[XConomy]<aqua>"
+                + MessagesManager.systemMessage("found-version") + Updater.newVersion));
+        TextComponent downloadLink = new TextComponent(Updater.downloadUrl);
+        downloadLink.setColor(ChatColor.GREEN);
+        downloadLink.setClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, Updater.downloadUrl));
+        player.spigot().sendMessage(downloadLink);
 
     }
 

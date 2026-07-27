@@ -86,6 +86,7 @@ track_expense_title: '<dark_gray><strikethrough>----------</strikethrough> <gold
 track_income_text: '<click:run_command:"/xconomy track flow %id%"><hover:show_text:"<gray>查看交易 <white>#%id% <gray>详情"><dark_gray> #%id% <yellow>[%time%] <green>+<white>%amount% <gray>从 <white>%from% <dark_gray>(%type%)</hover></click>'
 track_expense_text: '<click:run_command:"/xconomy track flow %id%"><hover:show_text:"<gray>查看交易 <white>#%id% <gray>详情"><dark_gray> #%id% <yellow>[%time%] <red>-<white>%amount% <gray>到 <white>%to% <dark_gray>(%type%)</hover></click>'
 track_no_records: '<red>暂无记录'
+track_disabled: '<red>交易追踪功能未启用'
 track_statistics: '<dark_gray> > <gray>总收入: <green>%income% <dark_gray>| <gray>总支出: <red>%expense% <dark_gray>| <gray>净收益: <aqua>%profit%'
 track_footer: '<dark_gray><strikethrough>----------</strikethrough> <click:run_command:"%command% %previous_page%"><hover:show_text:"<gray>前往第 <white>%previous_page% <gray>页"><yellow>[\< 上一页]</yellow></hover></click> <dark_gray>| <click:run_command:"%command% %next_page%"><hover:show_text:"<gray>前往第 <white>%next_page% <gray>页"><yellow>[下一页 >]</yellow></hover></click> <dark_gray><strikethrough>----------</strikethrough>'
 track_detail_not_found: '<red>未找到该交易记录'

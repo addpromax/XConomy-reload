@@ -9,91 +9,154 @@
  *
  *  This program is distributed in the hope that it will be useful, but
  *  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- *  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ *  or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
  *  for more details.
  *
- *  You should have received a copy of the GNU General Public License along
- *  with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
 package me.yic.xconomy.task;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import me.yic.xconomy.XConomy;
-import me.yic.xconomy.XConomyLoad;
+import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLConnection;
-import java.util.Arrays;
-import java.util.List;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 
 public class Updater extends BukkitRunnable {
+    private static final String PROJECT_ID = "UdMN9hv5";
+    private static final String PROJECT_URL = "https://modrinth.com/plugin/xconomy-reload";
 
     public static boolean old = false;
     public static String newVersion = "none";
+    public static String downloadUrl = PROJECT_URL;
 
     @Override
     public void run() {
+        HttpURLConnection connection = null;
         try {
-            URL url = new URL("https://api.spigotmc.org/legacy/update.php?resource=75669");
-            URLConnection conn = url.openConnection();
-            conn.setConnectTimeout(15000); //15 seconds
-            conn.setReadTimeout(60000);
-            InputStream is = conn.getInputStream();
-            newVersion = new BufferedReader(new InputStreamReader(is)).readLine();
-            is.close();
+            URL url = new URL("https://api.modrinth.com/v2/project/" + PROJECT_ID + "/version");
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestProperty("User-Agent", "XConomy/"
+                    + XConomy.getInstance().getDescription().getVersion()
+                    + " (https://github.com/addpromax/XConomy)");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(60000);
 
-            List<String> versionList = Arrays.asList(newVersion.split("\\."));
-            List<String> newVersionList = Arrays.asList(XConomy.getInstance().getDescription().getVersion().split("\\."));
+            try (InputStream input = connection.getInputStream();
+                 BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    response.append(line);
+                }
+                ReleaseInfo latestRelease = findLatestRelease(response.toString());
+                newVersion = latestRelease == null ? null : latestRelease.version;
+                if (latestRelease != null) {
+                    downloadUrl = latestRelease.downloadUrl;
+                }
+            }
 
-            if (!compare(versionList, newVersionList)) {
-                XConomy.getInstance().logger("已是最新版本", 0, null);
+            if (newVersion == null || !isNewer(newVersion, XConomy.getInstance().getDescription().getVersion())) {
+                XConomy.getInstance().logger("is-new-version", 0, null);
                 return;
             }
 
-            XConomy.getInstance().logger("发现新版本 ", 0, newVersion);
-            XConomy.getInstance().logger(null, 0, "https://www.spigotmc.org/resources/xconomy.75669/");
-
-            if (XConomyLoad.Config.LANGUAGE.equalsIgnoreCase("Chinese")
-                    | XConomyLoad.Config.LANGUAGE.equalsIgnoreCase("ChineseTW")) {
-                XConomy.getInstance().logger(null, 0, "https://www.mcbbs.net/thread-962904-1-1.html");
-            }
-
-
-        } catch (Exception exception) {
-            XConomy.getInstance().logger("检查更新失败", 0, null);
-        }
-    }
-
-    private static boolean compare(List<String> web, List<String> pl) {
-        int v1 = 0;
-        int v2 = 0;
-
-        for (int i = 0; i < 5; i++) {
-            if (web.size() >= i + 1) {
-                v1 = Integer.parseInt(web.get(i));
-            }
-
-            if (pl.size() >= i + 1) {
-                v2 = Integer.parseInt(pl.get(i));
-            }
-
-            if (v1 != (v2)) {
-                break;
-            }
-        }
-
-        int result = Integer.compare(v1 - v2, 0);
-        if (result > 0) {
             old = true;
-            return true;
-        } else {
-            return false;
+            XConomy.getInstance().logger("found-version", 0, newVersion);
+            XConomy.getInstance().logger(null, 0, downloadUrl);
+        } catch (Exception exception) {
+            XConomy.getInstance().logger("check-version-fail", 0, null);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
-
     }
 
+    private static ReleaseInfo findLatestRelease(String response) {
+        JsonArray versions = JsonParser.parseString(response).getAsJsonArray();
+        ReleaseInfo latestRelease = null;
+        String versionPrefix = getVersionPrefix();
+        for (JsonElement element : versions) {
+            JsonObject version = element.getAsJsonObject();
+            if (!"release".equalsIgnoreCase(version.get("version_type").getAsString())) {
+                continue;
+            }
+            String versionNumber = version.get("version_number").getAsString();
+            if (!versionNumber.startsWith(versionPrefix)) {
+                continue;
+            }
+            String pluginVersion = versionNumber.substring(versionPrefix.length());
+            if (latestRelease == null || isNewer(pluginVersion, latestRelease.version)) {
+                latestRelease = new ReleaseInfo(pluginVersion, getDownloadUrl(version));
+            }
+        }
+        return latestRelease;
+    }
+
+    private static String getVersionPrefix() {
+        String serverName = Bukkit.getName().toLowerCase(Locale.ROOT);
+        if (serverName.contains("paper") || serverName.contains("purpur") || serverName.contains("folia")) {
+            return "XConomy-Paper-";
+        }
+        return "XConomy-Bukkit-";
+    }
+
+    private static String getDownloadUrl(JsonObject version) {
+        JsonArray files = version.getAsJsonArray("files");
+        for (JsonElement element : files) {
+            JsonObject file = element.getAsJsonObject();
+            if (file.get("primary").getAsBoolean()) {
+                return file.get("url").getAsString();
+            }
+        }
+        return files.isEmpty() ? PROJECT_URL : files.get(0).getAsJsonObject().get("url").getAsString();
+    }
+
+    private static boolean isNewer(String candidate, String current) {
+        String[] candidateParts = candidate.replaceFirst("^[^0-9]*", "").split("[.-]");
+        String[] currentParts = current.replaceFirst("^[^0-9]*", "").split("[.-]");
+        int length = Math.max(candidateParts.length, currentParts.length);
+        for (int index = 0; index < length; index++) {
+            int candidatePart = parseVersionPart(candidateParts, index);
+            int currentPart = parseVersionPart(currentParts, index);
+            if (candidatePart != currentPart) {
+                return candidatePart > currentPart;
+            }
+        }
+        return false;
+    }
+
+    private static int parseVersionPart(String[] parts, int index) {
+        if (index >= parts.length) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(parts[index].replaceAll("[^0-9].*$", ""));
+        } catch (NumberFormatException exception) {
+            return 0;
+        }
+    }
+
+    private static final class ReleaseInfo {
+        private final String version;
+        private final String downloadUrl;
+
+        private ReleaseInfo(String version, String downloadUrl) {
+            this.version = version;
+            this.downloadUrl = downloadUrl;
+        }
+    }
 }

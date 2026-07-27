@@ -24,6 +24,12 @@ import me.yic.xconomy.lang.MessagesManager;
 import me.yic.xconomy.task.Updater;
 import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.network.ClientConnectionEvent;
+import org.spongepowered.api.entity.living.player.Player;
+import org.spongepowered.api.text.Text;
+import org.spongepowered.api.text.action.TextActions;
+
+import java.net.MalformedURLException;
+import java.net.URL;
 
 public class ConnectionListeners {
 
@@ -42,23 +48,23 @@ public class ConnectionListeners {
         PlayerConnection.onJoin(a);
 
         if (a.hasPermission("xconomy.admin.op")) {
-            notifyUpdate(a);
+            notifyUpdate(a, event.getTargetEntity());
         }
 
     }
 
 
-    private void notifyUpdate(CPlayer player) {
+    private void notifyUpdate(CPlayer messageRecipient, Player player) {
         if (!(XConomyLoad.Config.CHECK_UPDATE & Updater.old)) {
             return;
         }
-        player.sendMessage("§f[XConomy]§b" + MessagesManager.systemMessage("发现新版本 ") + Updater.newVersion);
-        player.sendMessage("§f[XConomy]§ahttps://ore.spongepowered.org/YiC/XConomy");
-
-        if (XConomyLoad.Config.LANGUAGE.equalsIgnoreCase("Chinese")
-                | XConomyLoad.Config.LANGUAGE.equalsIgnoreCase("ChineseTW")) {
-            player.sendMessage("§f[XConomy]§ahttps://www.mcbbs.net/thread-962904-1-1.html");
+        messageRecipient.sendMessage("§f[XConomy]§b" + MessagesManager.systemMessage("发现新版本 ") + Updater.newVersion);
+        try {
+            player.sendMessage(Text.builder(Updater.downloadUrl)
+                    .onClick(TextActions.openUrl(new URL(Updater.downloadUrl)))
+                    .build());
+        } catch (MalformedURLException exception) {
+            messageRecipient.sendMessage(Updater.downloadUrl);
         }
-
     }
 }

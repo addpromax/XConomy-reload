@@ -43,7 +43,7 @@ public class CommandTrack extends CommandCore {
 
     public static boolean onCommand(CSender sender, String[] args) {
         if (!XConomyLoad.isTransactionTrackingEnabled()) {
-            sendMessages(sender, PREFIX + MessagesManager.systemMessage("<red>交易追踪功能未启用"));
+            sendMessages(sender, PREFIX + translateColorCodes("track_disabled"));
             return true;
         }
 
@@ -254,13 +254,16 @@ public class CommandTrack extends CommandCore {
 
         String time = dateFormat.get().format(record.getDatetime());
         String amount = DataFormat.shown(record.getAmount());
-        String otherParty = "N/A";
-        String typeBase = getTransactionTypeDisplay(record.getTransactionType(), record.getCommand());
+        boolean legacyRecord = isLegacyTrackingRecord(record);
+        String unknown = translateColorCodes("track_type_unknown");
+        String otherParty = legacyRecord ? unknown : "N/A";
+        String typeBase = legacyRecord ? unknown
+                : getTransactionTypeDisplay(record.getTransactionType(), record.getCommand());
 
         // 如果有原因（comment 字段），在类型后附加原因
         String comment = record.getComment();
         String type;
-        if (comment != null && !comment.isEmpty()
+        if (!legacyRecord && comment != null && !comment.isEmpty()
                 && !comment.equalsIgnoreCase("null")
                 && !comment.equalsIgnoreCase("N/A")) {
             type = translateColorCodes("track_type_with_reason")
@@ -270,7 +273,7 @@ public class CommandTrack extends CommandCore {
             type = typeBase;
         }
 
-        if (trackType.equals("income")) {
+        if (!legacyRecord && trackType.equals("income")) {
             if (record.getFromUid() != null) {
                 PlayerData fromPlayer = DataCon.getPlayerData(record.getFromUid());
                 if (fromPlayer != null) {
@@ -284,7 +287,7 @@ public class CommandTrack extends CommandCore {
                     otherParty = translateColorCodes("track_type_system");
                 }
             }
-        } else {
+        } else if (!legacyRecord) {
             if (record.getToUid() != null) {
                 PlayerData toPlayer = DataCon.getPlayerData(record.getToUid());
                 if (toPlayer != null) {
@@ -322,11 +325,14 @@ public class CommandTrack extends CommandCore {
             return;
         }
 
+        boolean legacyRecord = isLegacyTrackingRecord(record);
+        String unknown = translateColorCodes("track_type_unknown");
         String player = displayPlayer(record.getUid(), record.getPlayer());
-        String from = displayPlayer(record.getFromUid(), null);
-        String to = displayPlayer(record.getToUid(), null);
-        String holder = displayPlayer(chain.getCurrentHolder(), null);
-        String type = getTransactionTypeDisplay(record.getTransactionType(), record.getCommand());
+        String from = legacyRecord ? unknown : displayPlayer(record.getFromUid(), null);
+        String to = legacyRecord ? unknown : displayPlayer(record.getToUid(), null);
+        String holder = legacyRecord ? unknown : displayPlayer(chain.getCurrentHolder(), null);
+        String type = legacyRecord ? unknown
+                : getTransactionTypeDisplay(record.getTransactionType(), record.getCommand());
         String time = dateFormat.get().format(record.getDatetime());
 
         sendMessages(sender, translateColorCodes("track_detail_title")
@@ -382,7 +388,10 @@ public class CommandTrack extends CommandCore {
 
     private static String displayPlayer(UUID playerId, String fallback) {
         if (playerId == null) {
-            return fallback == null ? translateColorCodes("track_type_system") : fallback;
+            if (fallback == null) {
+                return translateColorCodes("track_type_system");
+            }
+            return hasText(fallback) ? fallback : translateColorCodes("track_type_unknown");
         }
         PlayerData playerData = DataCon.getPlayerData(playerId);
         return playerData == null ? playerId.toString() : playerData.getName();
@@ -390,6 +399,10 @@ public class CommandTrack extends CommandCore {
 
     private static boolean hasText(String value) {
         return value != null && !value.isEmpty() && !value.equalsIgnoreCase("null") && !value.equalsIgnoreCase("N/A");
+    }
+
+    private static boolean isLegacyTrackingRecord(TransactionRecord record) {
+        return !hasText(record.getTransactionType());
     }
 
     private static String textOrDefault(String value) {
@@ -406,7 +419,7 @@ public class CommandTrack extends CommandCore {
     }
 
     private static String getTransactionTypeDisplay(String transactionType, String command) {
-        if (transactionType == null) {
+        if (!hasText(transactionType)) {
             return translateColorCodes("track_type_unknown");
         }
 
@@ -441,6 +454,8 @@ public class CommandTrack extends CommandCore {
                 return pluginLabel != null
                         ? translateColorCodes("track_type_plugin_set").replace("%plugin%", pluginLabel)
                         : translateColorCodes("track_type_plugin_set").replace("%plugin%", translateColorCodes("track_type_unknown"));
+            case "UNKNOWN":
+                return translateColorCodes("track_type_unknown");
             default:
                 // For truly unknown types, show the raw value so admins can diagnose
                 return transactionType;

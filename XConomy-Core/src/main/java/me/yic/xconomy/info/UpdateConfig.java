@@ -49,6 +49,31 @@ public class UpdateConfig {
             config.set("Settings.bstats", true);
             update = true;
         }
+        if (!config.contains("Transaction-Tracking.enable")) {
+            config.createSection("Transaction-Tracking.enable");
+            config.set("Transaction-Tracking.enable", true);
+            update = true;
+        }
+        if (!config.contains("Transaction-Tracking.retention-days")) {
+            config.createSection("Transaction-Tracking.retention-days");
+            config.set("Transaction-Tracking.retention-days", 90);
+            update = true;
+        }
+        if (!config.contains("Transaction-Tracking.auto-cleanup")) {
+            config.createSection("Transaction-Tracking.auto-cleanup");
+            config.set("Transaction-Tracking.auto-cleanup", true);
+            update = true;
+        }
+        if (!config.contains("Transaction-Tracking.cleanup-time")) {
+            config.createSection("Transaction-Tracking.cleanup-time");
+            config.set("Transaction-Tracking.cleanup-time", "03:00");
+            update = true;
+        }
+        if (!config.contains("Transaction-Tracking.records-per-page")) {
+            config.createSection("Transaction-Tracking.records-per-page");
+            config.set("Transaction-Tracking.records-per-page", 10);
+            update = true;
+        }
         if (update){
             try {
                 config.save();

@@ -86,6 +86,7 @@ track_expense_title: '<dark_gray><strikethrough>----------</strikethrough> <gold
 track_income_text: '<click:run_command:"/xconomy track flow %id%"><hover:show_text:"<gray>View transaction <white>#%id%"><dark_gray> #%id% <yellow>[%time%] <green>+<white>%amount% <gray>from <white>%from% <dark_gray>(%type%)</hover></click>'
 track_expense_text: '<click:run_command:"/xconomy track flow %id%"><hover:show_text:"<gray>View transaction <white>#%id%"><dark_gray> #%id% <yellow>[%time%] <red>-<white>%amount% <gray>to <white>%to% <dark_gray>(%type%)</hover></click>'
 track_no_records: '<red>No records found'
+track_disabled: '<red>Transaction tracking is not enabled'
 track_statistics: '<dark_gray> > <gray>Income: <green>%income% <dark_gray>| <gray>Expense: <red>%expense% <dark_gray>| <gray>Net: <aqua>%profit%'
 track_footer: '<dark_gray><strikethrough>----------</strikethrough> <click:run_command:"%command% %previous_page%"><hover:show_text:"<gray>Go to page <white>%previous_page%"><yellow>[\< Previous]</yellow></hover></click> <dark_gray>| <click:run_command:"%command% %next_page%"><hover:show_text:"<gray>Go to page <white>%next_page%"><yellow>[Next >]</yellow></hover></click> <dark_gray><strikethrough>----------</strikethrough>'
 track_detail_not_found: '<red>Transaction record not found'

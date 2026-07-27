@@ -53,6 +53,7 @@ public class LanguagesManager {
 
     private static List<String> index() {
         List<String> ll = new ArrayList<>();
+        ll.add("translation_authors");
         ll.add("prefix");
         ll.add("balance");
         ll.add("balance_other");
@@ -143,6 +144,7 @@ public class LanguagesManager {
         ll.add("track_income_text");
         ll.add("track_expense_text");
         ll.add("track_no_records");
+        ll.add("track_disabled");
         ll.add("track_statistics");
         ll.add("track_footer");
         ll.add("track_detail_not_found");
@@ -168,6 +170,7 @@ public class LanguagesManager {
         ll.add("track_type_system");
         ll.add("track_type_admin");
         ll.add("track_type_unknown");
+        ll.add("track_type_with_reason");
         ll.add("console_name");
         ll.add("track_view_other_no_permission");
         ll.add("tab_amount");
