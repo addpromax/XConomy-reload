@@ -25,6 +25,7 @@ import me.yic.xconomy.data.DataCon;
 import me.yic.xconomy.data.DataFormat;
 import me.yic.xconomy.data.GetUUID;
 import me.yic.xconomy.data.ImportData;
+import me.yic.xconomy.data.DataMigration;
 import me.yic.xconomy.data.caches.Cache;
 import me.yic.xconomy.data.syncdata.PlayerData;
 import me.yic.xconomy.data.syncdata.SyncUUID;
@@ -41,6 +42,9 @@ import java.util.UUID;
 public class SQLCreateNewAccount extends SQL {
 
     public static boolean newPlayer(UUID uid, String name, CPlayer player) {
+        if (DataMigration.isRunning()) {
+            return false;
+        }
         if (player!=null && DataCon.containinfieldslist(name)) {
             kickplayer(player, 2, "");
             return false;
@@ -119,8 +123,8 @@ public class SQLCreateNewAccount extends SQL {
             } else {
                 createPlayerAccount(uid, name, connection);
                 // 新建账号后立即写入缓存，避免登录后指令竞态
-                BigDecimal initialBal = ImportData.getBalance(name, XConomyLoad.Config.INITIAL_BAL);
                 UUID parsedUid = UUID.fromString(uid);
+                BigDecimal initialBal = ImportData.getBalance(parsedUid, name, XConomyLoad.Config.INITIAL_BAL);
                 PlayerData bd = new PlayerData(parsedUid, name, initialBal);
                 Cache.insertIntoCache(parsedUid, bd);
             }
@@ -137,10 +141,12 @@ public class SQLCreateNewAccount extends SQL {
         try {
             String query;
             if (XConomyLoad.Config.USERNAME_IGNORE_CASE) {
-                if (XConomyLoad.DConfig.isMySQL()) {
-                    query = "select * from " + tableName + " where player = ?";
-                } else {
+                if (XConomyLoad.DConfig.getStorageType() == 1) {
                     query = "select * from " + tableName + " where player = ? COLLATE NOCASE";
+                } else if (XConomyLoad.DConfig.isPostgreSQL()) {
+                    query = "select * from " + tableName + " where LOWER(player) = LOWER(?)";
+                } else {
+                    query = "select * from " + tableName + " where player = ?";
                 }
             } else {
                 if (XConomyLoad.DConfig.isMySQL()) {
@@ -175,17 +181,28 @@ public class SQLCreateNewAccount extends SQL {
     }
 
 
+    private static UUID parseUUID(String uid) {
+        try {
+            return UUID.fromString(uid);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
     private static void createPlayerAccount(String UID, String user, Connection co_a) {
         try {
             String query = "INSERT OR IGNORE INTO " + tableName + "(UID,player,balance,hidden) values(?,?,?,?)";
             if (XConomyLoad.DConfig.isMySQL()) {
                 query = query.replace("INSERT OR IGNORE", "INSERT IGNORE");
+            } else if (XConomyLoad.DConfig.isPostgreSQL()) {
+                query = "INSERT INTO " + tableName + "(UID,player,balance,hidden) values(?,?,?,?) ON CONFLICT (UID) DO NOTHING";
             }
             PreparedStatement statement = co_a.prepareStatement(query);
             statement.setString(1, UID);
             statement.setString(2, user);
 
-            statement.setDouble(3, ImportData.getBalance(user, XConomyLoad.Config.INITIAL_BAL).doubleValue());
+            statement.setDouble(3, ImportData.getBalance(parseUUID(UID), user,
+                    XConomyLoad.Config.INITIAL_BAL).doubleValue());
 
             int hid = 0;
             if (NonPlayerPlugin.SimpleCheckNonPlayerAccount(user)){
@@ -202,11 +219,16 @@ public class SQLCreateNewAccount extends SQL {
     }
 
     public static boolean createNonPlayerAccount(String account) {
+        if (DataMigration.isRunning()) {
+            return false;
+        }
         Connection co = database.getConnectionAndCheck();
         try {
             String query = "INSERT OR IGNORE INTO " + tableNonPlayerName + "(account, balance) values(?,?)";
             if (XConomyLoad.DConfig.isMySQL()) {
                 query = query.replace("INSERT OR IGNORE", "INSERT IGNORE");
+            } else if (XConomyLoad.DConfig.isPostgreSQL()) {
+                query = "INSERT INTO " + tableNonPlayerName + "(account,balance) values(?,?) ON CONFLICT (account) DO NOTHING";
             }
             PreparedStatement statement = co.prepareStatement(query);
             statement.setString(1, account);
@@ -227,7 +249,9 @@ public class SQLCreateNewAccount extends SQL {
             String query;
             if (XConomyLoad.DConfig.isMySQL()) {
                 query = "INSERT INTO " + tableUUIDName + "(UUID,DUUID) values(?,?) ON DUPLICATE KEY UPDATE DUUID = ?";
-            }else{
+            } else if (XConomyLoad.DConfig.isPostgreSQL()) {
+                query = "INSERT INTO " + tableUUIDName + "(UUID,DUUID) values(?,?) ON CONFLICT (UUID) DO UPDATE SET DUUID = EXCLUDED.DUUID";
+            } else {
                 query = "INSERT OR IGNORE INTO " + tableUUIDName + "(UUID,DUUID) values(?,?)";
             }
             PreparedStatement statement = co_a.prepareStatement(query);
@@ -278,7 +302,7 @@ public class SQLCreateNewAccount extends SQL {
                 user = name;
                 createPlayerAccount(UID.toString(), user, connection);
                 // 新建账号后立即写入缓存，避免登录后指令竞态
-                BigDecimal initialBal = ImportData.getBalance(user, XConomyLoad.Config.INITIAL_BAL);
+                BigDecimal initialBal = ImportData.getBalance(UID, user, XConomyLoad.Config.INITIAL_BAL);
                 if (!XConomyLoad.Config.UUIDMODE.equals(UUIDMode.SEMIONLINE)) {
                     PlayerData bd = new PlayerData(UID, user, initialBal);
                     Cache.insertIntoCache(UID, bd);

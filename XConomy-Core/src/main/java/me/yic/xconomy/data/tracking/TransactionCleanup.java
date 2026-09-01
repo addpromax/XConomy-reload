@@ -100,11 +100,12 @@ public class TransactionCleanup {
             if (connection == null) {
                 return 0;
             }
-            String query = "DELETE FROM " + SQL.tableRecordName +
-                          " WHERE datetime < DATE_SUB(NOW(), INTERVAL ? DAY)";
+            String query = "DELETE FROM " + SQL.tableRecordName + " WHERE datetime < ?";
 
             PreparedStatement statement = connection.prepareStatement(query);
-            statement.setInt(1, days);
+            java.util.Calendar cutoff = java.util.Calendar.getInstance();
+            cutoff.add(java.util.Calendar.DAY_OF_MONTH, -days);
+            statement.setTimestamp(1, new java.sql.Timestamp(cutoff.getTimeInMillis()));
             deleted = statement.executeUpdate();
             statement.close();
 

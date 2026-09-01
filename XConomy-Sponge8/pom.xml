@@ -82,6 +82,7 @@
                     <artifactSet>
                         <includes>
                             <include>org.bstats:*</include>
+                            <include>org.postgresql:postgresql</include>
                             <include>redis.clients:jedis</include>
                             <include>org.apache.commons:commons-pool2</include>
                             <include>com.google.code.gson:gson</include>

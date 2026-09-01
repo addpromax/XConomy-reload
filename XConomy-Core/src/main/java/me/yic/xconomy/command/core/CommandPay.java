@@ -75,14 +75,8 @@ public class CommandPay extends CommandCore{
             return true;
         }
 
-        if (!isDouble(args[1])) {
-            sendMessages(sender, PREFIX + translateColorCodes("invalid_amount"));
-            return true;
-        }
-
-        BigDecimal amount = DataFormat.formatString(args[1]);
-
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+        BigDecimal amount = parseAmount(args[1]);
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             sendMessages(sender, PREFIX + translateColorCodes("invalid_amount"));
             return true;
         }
@@ -161,5 +155,6 @@ public class CommandPay extends CommandCore{
         target.sendMessage(mess);
         return true;
     }
+
 
 }

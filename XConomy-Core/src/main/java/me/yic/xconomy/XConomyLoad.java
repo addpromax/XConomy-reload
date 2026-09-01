@@ -73,7 +73,7 @@ public class XConomyLoad{
             XConomy.getInstance().logger(null, 0, "Transaction tracking system enabled");
         } else if (Config.TRACKING_ENABLE) {
             XConomy.getInstance().logger(null, 1,
-                    "Transaction tracking requires MySQL/MariaDB and Settings.transaction-record: true; tracking has been disabled");
+                    "Transaction tracking requires MySQL, MariaDB, or PostgreSQL and Settings.transaction-record: true; tracking has been disabled");
         }
     }
 
@@ -101,7 +101,7 @@ public class XConomyLoad{
 
     public static boolean isTransactionTrackingEnabled() {
         return Config != null && DConfig != null && Config.TRACKING_ENABLE
-                && Config.TRANSACTION_RECORD && DConfig.isMySQL();
+                && Config.TRANSACTION_RECORD && DConfig.isRemoteDatabase();
     }
 
 }

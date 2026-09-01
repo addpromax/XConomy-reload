@@ -17,6 +17,8 @@ import java.net.URL;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 @SuppressWarnings({"unused", "ConfusingArgumentToVarargsMethod"})
 public class CConfig implements iConfig {
@@ -89,6 +91,31 @@ public class CConfig implements iConfig {
     public boolean contains(String path){
         String[] a = path.split("\\.");
         return !fc.getNode(a).isVirtual();
+    }
+
+    @Override
+    public Map<String, Object> getLeafValues(){
+        Map<String, Object> leaves = new TreeMap<>();
+        if (fc != null) {
+            collectLeafValues(fc, "", leaves);
+        }
+        return leaves;
+    }
+
+    private static void collectLeafValues(ConfigurationNode node, String path, Map<String, Object> leaves){
+        if (node.hasMapChildren()) {
+            for (Map.Entry<Object, ? extends ConfigurationNode> child : node.getChildrenMap().entrySet()) {
+                String childPath = path.isEmpty()
+                        ? String.valueOf(child.getKey())
+                        : path + "." + child.getKey();
+                collectLeafValues(child.getValue(), childPath, leaves);
+            }
+            return;
+        }
+        if (!path.isEmpty() && !node.isVirtual()) {
+            // 标量与列表都作为整体叶子值处理。
+            leaves.put(path, node.getValue());
+        }
     }
 
     @Override

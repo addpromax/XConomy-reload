@@ -1,3 +1,5 @@
+#Configuration structure version, maintained by the plugin. Please do not edit.
+config-version: 1
 #Default Online Offline SemiOnline
 #Default mode will automatically detect the player's UUID(support GeyserMC)
 #Online mode is better for servers that enable online-mode(support Yggdrasil)
@@ -40,6 +42,9 @@ Settings:
   initial-bal: 0
   #Tax to be paid for pay command (0.5 means 50%, 1 means 100%)
   payment-tax: 0
+  #Allow amount abbreviations in all commands: k=1,000, m=1,000,000, b=1,000,000,000
+  #Examples: 10k=10000, 1.3k=1300, 1m=1000000
+  amount-abbreviations: true
   #Ranking size (Max value 100)
   ranking-size: 10
   #Rows per page of list (Ranking and help menu)
@@ -49,7 +54,7 @@ Settings:
   #Disabling caching will increase the pressure on the database
   disable-cache: false
   #Dose save transaction record
-  #Only MySQL is supported
+  #MySQL, MariaDB and PostgreSQL are supported
   transaction-record: true
   #Record transaction information of pay command while player offline.
   #The player will receive tips when they reconnect.

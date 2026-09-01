@@ -150,7 +150,10 @@ public class XConomy extends JavaPlugin {
     public void onDisable() {
 
         if (XConomyLoad.Config.IMPORTMODE){
-            itd.onDisable();
+            // 导入模式初始化失败时 itd 可能仍为 null。
+            if (itd != null) {
+                itd.onDisable();
+            }
             return;
         }
 
@@ -216,18 +219,21 @@ public class XConomy extends JavaPlugin {
         if (!file.exists()) {
             XConomy.getInstance().saveResource("database.yml", false);
         }
+        UpdateConfig.update(new CConfig(file), "database.yml");
         DataBaseConfig.config = new CConfig(YamlConfiguration.loadConfiguration(file));
     }
 
     public void reloadConfigs() {
         // 重新加载 Bukkit 配置文件
         reloadConfig();
-        
+
         // 重新加载配置对象
+        update_config();
         File config = new File(this.getDataFolder(), "config.yml");
         DefaultConfig.config = new CConfig(config);
-        
+
         File file = new File(XConomy.getInstance().getDataFolder(), "database.yml");
+        UpdateConfig.update(new CConfig(file), "database.yml");
         DataBaseConfig.config = new CConfig(YamlConfiguration.loadConfiguration(file));
         
         // 重新加载 XConomy 配置
@@ -273,7 +279,7 @@ public class XConomy extends JavaPlugin {
 
     private void update_config() {
         File config = new File(this.getDataFolder(), "config.yml");
-        UpdateConfig.update(new CConfig(config));
+        UpdateConfig.update(new CConfig(config), "config.yml");
     }
 
     public File getPDataFolder() {

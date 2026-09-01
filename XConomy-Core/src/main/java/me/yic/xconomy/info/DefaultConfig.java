@@ -50,6 +50,7 @@ public class DefaultConfig {
     public boolean DISABLE_ESSENTIAL = config.getBoolean("Settings.disable-essentials");
     public double INITIAL_BAL = config.getDouble("Settings.initial-bal");
     public BigDecimal PAYMENT_TAX = BigDecimal.ZERO;
+    public boolean AMOUNT_ABBREVIATIONS = config.getBoolean("Settings.amount-abbreviations");
     public int RANKING_SIZE = getrankingsize();
     public int LINES_PER_PAGE = config.getInt("Settings.lines-per-page");
     public boolean DISABLE_CACHE = config.getBoolean("Settings.disable-cache");

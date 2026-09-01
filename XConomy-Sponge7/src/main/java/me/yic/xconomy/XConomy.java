@@ -322,7 +322,7 @@ public class XConomy {
         }
 
         DefaultConfig.config = new CConfig(configpath);
-        UpdateConfig.update(DefaultConfig.config);
+        UpdateConfig.update(DefaultConfig.config, "config.yml");
     }
 
     private void DataBaseload() {
@@ -337,6 +337,7 @@ public class XConomy {
 
         }
 
+        UpdateConfig.update(new CConfig(configpath.toFile()), "database.yml");
         YAMLConfigurationLoader loader = YAMLConfigurationLoader.builder().setPath(configpath).build();
         try {
             DataBaseConfig.config = new CConfig(loader.load());

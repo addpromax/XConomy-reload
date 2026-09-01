@@ -10,9 +10,12 @@ import java.io.*;
 import java.math.BigDecimal;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 @SuppressWarnings("unused")
 public class CConfig implements iConfig {
@@ -33,24 +36,26 @@ public class CConfig implements iConfig {
     public CConfig(URL url){
         this.ff = null;
         FileConfiguration pfc = null;
-        HttpURLConnection conn = null;
+        URLConnection conn = null;
         InputStream is = null;
         Reader br = null;
-        StringBuilder uuid = new StringBuilder();
         try {
-            conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
+            conn = url.openConnection();
             conn.setConnectTimeout(10000);
             conn.setReadTimeout(30000);
-            conn.setRequestProperty("Accept", "application/json");
-            conn.connect();
-            if (200 == conn.getResponseCode()) {
-                is = conn.getInputStream();
-                br = new InputStreamReader(is, StandardCharsets.UTF_8);
-                pfc = YamlConfiguration.loadConfiguration(br);
-            } else {
-                throw new Exception("ResponseCode is an error code:" + conn.getResponseCode());
+            // 该构造既用于远程地址，也用于读取插件包内的模板资源。
+            if (conn instanceof HttpURLConnection) {
+                HttpURLConnection httpConn = (HttpURLConnection) conn;
+                httpConn.setRequestMethod("GET");
+                httpConn.setRequestProperty("Accept", "application/json");
+                httpConn.connect();
+                if (200 != httpConn.getResponseCode()) {
+                    throw new IOException("ResponseCode is an error code:" + httpConn.getResponseCode());
+                }
             }
+            is = conn.getInputStream();
+            br = new InputStreamReader(is, StandardCharsets.UTF_8);
+            pfc = YamlConfiguration.loadConfiguration(br);
         } catch (Exception ignored) {
             //e.printStackTrace();
         } finally {
@@ -61,11 +66,11 @@ public class CConfig implements iConfig {
                 if (is != null) {
                     is.close();
                 }
-                if (conn != null) {
-                    conn.disconnect();
-                }
             } catch (IOException ioe) {
                 ioe.printStackTrace();
+            }
+            if (conn instanceof HttpURLConnection) {
+                ((HttpURLConnection) conn).disconnect();
             }
         }
         fc = pfc;
@@ -115,6 +120,21 @@ public class CConfig implements iConfig {
     @Override
     public boolean contains(String path){
         return fc.contains(path);
+    }
+
+    @Override
+    public Map<String, Object> getLeafValues(){
+        Map<String, Object> leaves = new TreeMap<>();
+        if (fc == null) {
+            return leaves;
+        }
+        for (Map.Entry<String, Object> entry : fc.getValues(true).entrySet()) {
+            // getValues(true) 同时返回配置区块本身，这里只保留叶子值。
+            if (!(entry.getValue() instanceof ConfigurationSection)) {
+                leaves.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return leaves;
     }
 
     @Override

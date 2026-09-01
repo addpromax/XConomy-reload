@@ -6,8 +6,10 @@ import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URL;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 
 @SuppressWarnings("unused")
@@ -30,6 +32,11 @@ public class CConfig implements iConfig {
     @Override
     public boolean contains(String path) {
         return false;
+    }
+
+    @Override
+    public Map<String, Object> getLeafValues() {
+        return Collections.emptyMap();
     }
 
     @Override

@@ -31,7 +31,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.UUID;
 
@@ -40,17 +39,22 @@ public class SQLLogin extends SQL {
     public static void updatelogininfo(UUID uuid) {
         Connection connection = database.getConnectionAndCheck();
         Date dd = new Date();
-        String sd = (new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")).format(dd);
         try {
-            String sql = "INSERT INTO " + tableLoginName + " (UUID,last_time) values(?,?) ON DUPLICATE KEY UPDATE last_time = ?";
+            boolean postgres = XConomyLoad.DConfig.isPostgreSQL();
+            String sql = postgres
+                    ? "INSERT INTO " + tableLoginName + " (UUID,last_time) values(?,?) ON CONFLICT (UUID) DO UPDATE SET last_time = EXCLUDED.last_time"
+                    : "INSERT INTO " + tableLoginName + " (UUID,last_time) values(?,?) ON DUPLICATE KEY UPDATE last_time = ?";
             PreparedStatement statement = connection.prepareStatement(sql);
             if (XConomyLoad.Config.UUIDMODE.equals(UUIDMode.SEMIONLINE)) {
                 statement.setString(1, DataCon.getPlayerData(uuid).getUniqueId().toString());
             }else{
                 statement.setString(1, uuid.toString());
             }
-            statement.setString(2, sd);
-            statement.setString(3, sd);
+            java.sql.Timestamp timestamp = new java.sql.Timestamp(dd.getTime());
+            statement.setTimestamp(2, timestamp);
+            if (!postgres) {
+                statement.setTimestamp(3, timestamp);
+            }
 
             statement.executeUpdate();
             statement.close();

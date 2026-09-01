@@ -30,30 +30,32 @@ public class DataBaseConfig {
     public static CConfig config;
 
     public void Initialization() {
-        if (!XConomyLoad.Config.DISABLE_CACHE) {
-            if (getStorageType() != 1) {
-                canasync = true;
-            }
-        }
+        canasync = !XConomyLoad.Config.DISABLE_CACHE && isRemoteDatabase();
         setHikariConnectionPooling();
     }
 
     public boolean EnableConnectionPool = false;
     public boolean canasync = false;
 
-    public final String ENCODING = config.getString("MySQL.property.encoding");
+    public final String ENCODING = config.getString(
+            isPostgreSQL() ? "PostgreSQL.property.encoding" : "MySQL.property.encoding");
 
 
     public int getStorageType() {
-        if (config.getString("Settings.storage-type").equalsIgnoreCase("MySQL")) {
+        String storageType = config.getString("Settings.storage-type");
+        if (storageType != null && storageType.equalsIgnoreCase("MySQL")) {
             return 2;
-        }else if (config.getString("Settings.storage-type").equalsIgnoreCase("MariaDB")) {
+        } else if (storageType != null && storageType.equalsIgnoreCase("MariaDB")) {
             return 3;
+        } else if (storageType != null && (storageType.equalsIgnoreCase("PostgreSQL")
+                || storageType.equalsIgnoreCase("Postgres"))) {
+            return 4;
         }
         return 1;
     }
 
     public void setHikariConnectionPooling() {
+        EnableConnectionPool = false;
         if (config.getBoolean("Settings.usepool")) {
             try {
                 Class.forName("org.slf4j.Logger");
@@ -83,58 +85,78 @@ public class DataBaseConfig {
         return getStorageType() == 2 || getStorageType() == 3;
     }
 
+    public boolean isPostgreSQL() {
+        return getStorageType() == 4;
+    }
+
+    public boolean isRemoteDatabase() {
+        return getStorageType() >= 2;
+    }
+
+    private String remoteConfigPath(String key) {
+        return isPostgreSQL() ? "PostgreSQL." + key : "MySQL." + key;
+    }
+
     public String gethost() {
         if (getStorageType() == 1) {
             return config.getString("SQLite.path");
-        } else if (getStorageType() == 2 || getStorageType() == 3) {
-            return config.getString("MySQL.host");
+        } else if (isRemoteDatabase()) {
+            return config.getString(remoteConfigPath("host"));
         }
         return "";
     }
 
     public String getuser() {
-        if (getStorageType() == 2 || getStorageType() == 3) {
-            return config.getString("MySQL.user");
-        }
-        return "";
+        return isRemoteDatabase() ? config.getString(remoteConfigPath("user")) : "";
     }
 
     public String getpass() {
-        if (getStorageType() == 2 || getStorageType() == 3) {
-            return config.getString("MySQL.pass");
-        }
-        return "";
+        return isRemoteDatabase() ? config.getString(remoteConfigPath("pass")) : "";
+    }
+
+    public String getdatabase() {
+        return isRemoteDatabase() ? config.getString(remoteConfigPath("database")) : "";
+    }
+
+    public int getport() {
+        return isRemoteDatabase() ? config.getInt(remoteConfigPath("port")) : 0;
     }
 
     public String gettablesuffix() {
-        if (getStorageType() == 2 || getStorageType() == 3) {
-            return config.getString("MySQL.table-suffix");
-        }
-        return "";
+        return isRemoteDatabase() ? config.getString(remoteConfigPath("table-suffix")) : "";
     }
 
-
     public String geturl() {
-        if (getStorageType() == 2 || getStorageType() == 3) {
-            String url = "jdbc:mysql://";
-            if (getStorageType() == 3){
-                url = "jdbc:mariadb://";
+        if (!isRemoteDatabase()) {
+            return "";
+        }
+        String scheme;
+        if (getStorageType() == 2) {
+            scheme = "jdbc:mysql://";
+        } else if (getStorageType() == 3) {
+            scheme = "jdbc:mariadb://";
+        } else {
+            scheme = "jdbc:postgresql://";
+        }
+        String url = scheme + gethost() + ":" + getport() + "/" + getdatabase();
+        String timezone = config.getString(remoteConfigPath("property.timezone"));
+        Boolean ssl = config.getBoolean(remoteConfigPath("property.usessl"));
+        String encoding = config.getString(remoteConfigPath("property.encoding"));
+        if (isPostgreSQL()) {
+            url += "?ssl=" + ssl;
+            if (timezone != null && !timezone.isEmpty()) {
+                url += "&options=-c%20TimeZone%3D" + timezone;
             }
-            url += config.getString("MySQL.host")
-                    + ":" + config.getString("MySQL.port") + "/"
-                    + config.getString("MySQL.database") + "?characterEncoding="
-                    + ENCODING + "&useSSL="
-                    + config.getString("MySQL.property.usessl");
-            if (config.getString("MySQL.property.timezone") != null &&
-                    !config.getString("MySQL.property.timezone").equals("")) {
-                url = url + "&serverTimezone=" + config.getString("MySQL.property.timezone");
+        } else {
+            url += "?characterEncoding=" + encoding + "&useSSL=" + ssl;
+            if (timezone != null && !timezone.isEmpty()) {
+                url += "&serverTimezone=" + timezone;
             }
             if (config.getBoolean("MySQL.property.allowPublicKeyRetrieval")) {
-                url = url + "&allowPublicKeyRetrieval=true";
+                url += "&allowPublicKeyRetrieval=true";
             }
-            return url;
         }
-        return "";
+        return url;
     }
 
     public void loggersysmess(String tag) {
@@ -148,6 +170,9 @@ public class DataBaseConfig {
                 break;
             case 3:
                 XConomy.getInstance().logger(null, 0, mess.replace("%type%", "MariaDB"));
+                break;
+            case 4:
+                XConomy.getInstance().logger(null, 0, mess.replace("%type%", "PostgreSQL"));
                 break;
         }
     }

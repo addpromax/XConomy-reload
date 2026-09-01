@@ -2,3 +2,21 @@ XConomy.iml
 .idea
 target
 参考代码/
+
+# 编译产物
+bin/
+*.class
+*.jar
+.narrafork/
+.claude/
+.cursor/
+.cursorrules
+.aider*
+.codex/
+.windsurf/
+.continue/
+.github/copilot-instructions.md
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.mcp.json

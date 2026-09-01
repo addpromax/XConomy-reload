@@ -217,13 +217,8 @@ public class CommandBalance extends CommandCore{
         String targetName = args[1];
         String amountStr = args[2];
 
-        if (!isDouble(amountStr)) {
-            sendMessages(sender, PREFIX + translateColorCodes("invalid_amount"));
-            return true;
-        }
-
-        BigDecimal amount = DataFormat.formatString(amountStr);
-        if (amount.compareTo(BigDecimal.ZERO) < 0) {
+        BigDecimal amount = parseAmount(amountStr);
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) < 0) {
             sendMessages(sender, PREFIX + translateColorCodes("invalid_amount"));
             return true;
         }
@@ -443,13 +438,8 @@ public class CommandBalance extends CommandCore{
         }
 
         String amountStr = args[3];
-        if (!isDouble(amountStr)) {
-            sendMessages(sender, PREFIX + translateColorCodes("invalid_amount"));
-            return true;
-        }
-
-        BigDecimal amount = DataFormat.formatString(amountStr);
-        if (amount.compareTo(BigDecimal.ZERO) < 0
+        BigDecimal amount = parseAmount(amountStr);
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) < 0
                 || (!subCommand.equals("set") && amount.compareTo(BigDecimal.ZERO) <= 0)) {
             sendMessages(sender, PREFIX + translateColorCodes("invalid_amount"));
             return true;

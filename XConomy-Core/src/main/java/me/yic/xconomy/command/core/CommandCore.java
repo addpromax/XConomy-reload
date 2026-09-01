@@ -87,16 +87,28 @@ public class CommandCore {
                     if (args.length == 2 && args[0].equalsIgnoreCase("migrate")) {
                         String targetType = args[1];
                         
-                        if (!targetType.equalsIgnoreCase("SQLite") && !targetType.equalsIgnoreCase("MySQL")) {
+                        if (!targetType.equalsIgnoreCase("SQLite")
+                                && !targetType.equalsIgnoreCase("MySQL")
+                                && !targetType.equalsIgnoreCase("MariaDB")
+                                && !targetType.equalsIgnoreCase("PostgreSQL")
+                                && !targetType.equalsIgnoreCase("Postgres")) {
                             sendUsage(sender, "usage_xconomy_migrate");
                             return true;
                         }
+                        if (targetType.equalsIgnoreCase("Postgres")) {
+                            targetType = "PostgreSQL";
+                        }
+                        if (DataMigration.isRunning()) {
+                            sendMessages(sender, PREFIX + "<red>已有迁移任务正在运行");
+                            return true;
+                        }
+                        final String migrationTarget = targetType;
                         
                         sendMessages(sender, PREFIX + "<yellow>开始数据迁移，请勿关闭服务器...");
                         
                         // 异步执行迁移
                         AdapterManager.runTaskAsynchronously(() -> {
-                            DataMigration.migrate(targetType, new DataMigration.MigrationCallback() {
+                            DataMigration.migrate(migrationTarget, new DataMigration.MigrationCallback() {
                                 @Override
                                 public void onStart(String sourceType, String targetType) {
                                     sendMessages(sender, PREFIX + "<yellow>正在从 " + sourceType + " 迁移到 " + targetType);
@@ -195,27 +207,54 @@ public class CommandCore {
     }
 
     protected static boolean isDouble(String s) {
-        if (s.length() > 20){
-            return false;
-        }
-        if (s.matches(".*[a-zA-Z].*")) {
-            return false;
+        return parseAmount(s) != null;
+    }
+
+    protected static BigDecimal parseAmount(String input) {
+        if (input == null) {
+            return null;
         }
 
-        BigDecimal value;
+        String number = input.trim();
+        if (number.isEmpty()) {
+            return null;
+        }
+
+        BigDecimal multiplier = BigDecimal.ONE;
+        char suffix = Character.toLowerCase(number.charAt(number.length() - 1));
+        if (Character.isLetter(suffix)) {
+            if (!XConomyLoad.Config.AMOUNT_ABBREVIATIONS) {
+                return null;
+            }
+            switch (suffix) {
+                case 'k':
+                    multiplier = new BigDecimal("1000");
+                    break;
+                case 'm':
+                    multiplier = new BigDecimal("1000000");
+                    break;
+                case 'b':
+                    multiplier = new BigDecimal("1000000000");
+                    break;
+                default:
+                    return null;
+            }
+            number = number.substring(0, number.length() - 1);
+        }
+
+        if (number.isEmpty() || number.length() > 20 || number.matches(".*[a-zA-Z].*")) {
+            return null;
+        }
+
         try {
-            // 直接尝试解析为BigDecimal，不再限制小数位数
-            // 后续会通过DataFormat.formatString()自动按配置取整
-            value = new BigDecimal(s);
+            BigDecimal amount = DataFormat.formatBigDecimal(new BigDecimal(number).multiply(multiplier));
+            if (amount.compareTo(BigDecimal.ZERO) > 0 && DataFormat.isMAX(amount)) {
+                return null;
+            }
+            return amount;
         } catch (NumberFormatException ignored) {
-            return false;
+            return null;
         }
-
-        if (value.compareTo(BigDecimal.ZERO) > 0) {
-            return !DataFormat.isMAX(DataFormat.formatString(s));
-        }
-
-        return true;
     }
 
     public static boolean check() {

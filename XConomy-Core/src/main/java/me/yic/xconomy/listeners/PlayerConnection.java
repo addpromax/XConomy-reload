@@ -55,7 +55,8 @@ public class PlayerConnection{
             }
         }
 
-        if (XConomyLoad.DConfig.isMySQL() && XConomyLoad.Config.PAY_TIPS) {
+        if (XConomyLoad.DConfig.isRemoteDatabase() && XConomyLoad.Config.TRANSACTION_RECORD
+                && XConomyLoad.Config.PAY_TIPS) {
             DataLink.selectlogininfo(player);
         }
 
@@ -76,7 +77,8 @@ public class PlayerConnection{
             DataCon.SendMessTask(new SyncTab(player.getName(), false));
         }
 
-        if (XConomyLoad.DConfig.isMySQL() && XConomyLoad.Config.PAY_TIPS) {
+        if (XConomyLoad.DConfig.isRemoteDatabase() && XConomyLoad.Config.TRANSACTION_RECORD
+                && XConomyLoad.Config.PAY_TIPS) {
             DataLink.updatelogininfo(player.getUniqueId());
         }
         DataCon.removePlayerHiddenState(player.getUniqueId());

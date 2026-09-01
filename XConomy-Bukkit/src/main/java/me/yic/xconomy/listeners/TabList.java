@@ -90,10 +90,12 @@ public class TabList implements TabCompleter {
 
                 } else if (args.length == 2 && !args[0].equalsIgnoreCase("track")) {
                     if (args[0].equalsIgnoreCase("migrate") && commandSender.isOp()) {
-                        // /xconomy migrate <SQLite|MySQL>
+                        // /xconomy migrate <SQLite|MySQL|MariaDB|PostgreSQL>
                         List<String> DB_TYPES = new ArrayList<>();
                         DB_TYPES.add("SQLite");
                         DB_TYPES.add("MySQL");
+                        DB_TYPES.add("MariaDB");
+                        DB_TYPES.add("PostgreSQL");
                         StringUtil.copyPartialMatches(args[1], DB_TYPES, completions);
                     } else if (args[0].equalsIgnoreCase("deldata") && commandSender.isOp()) {
                         // /xconomy deldata <玩家>

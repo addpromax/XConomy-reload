@@ -39,7 +39,9 @@ public class SQLUpdateTable extends SQL {
             try {
                 XConomy.getInstance().logger("升级数据库表格。。。", 0, tableName);
 
-                PreparedStatement statementb = connection.prepareStatement("alter table " + tableName + " add column hidden int(5) not null default '0'");
+                String integerType = XConomyLoad.DConfig.isPostgreSQL() ? "INTEGER" : "int(5)";
+                PreparedStatement statementb = connection.prepareStatement(
+                        "alter table " + tableName + " add column hidden " + integerType + " not null default 0");
 
                 statementb.executeUpdate();
                 statementb.close();
@@ -53,22 +55,45 @@ public class SQLUpdateTable extends SQL {
 
 
     public static void updataTable_record() {
-        if (XConomyLoad.DConfig.isMySQL() && XConomyLoad.Config.TRANSACTION_RECORD) {
-            Connection connection = database.getConnectionAndCheck();
-            try {
-                PreparedStatement statementa = connection.prepareStatement("desc " + tableRecordName + " date");
-                ResultSet rs = statementa.executeQuery();
-                if (rs.next()) {
-                    XConomy.getInstance().logger("升级数据库表格。。。", 0, tableRecordName);
-                    PreparedStatement statementb = connection.prepareStatement("alter table " + tableRecordName + " rename to " + tableRecordName + "_old");
-                    statementb.executeUpdate();
-                    statementb.close();
-                    createTable();
+        if (!XConomyLoad.DConfig.isRemoteDatabase() || !XConomyLoad.Config.TRANSACTION_RECORD) {
+            return;
+        }
+        Connection connection = database.getConnectionAndCheck();
+        if (connection == null) {
+            return;
+        }
+        try {
+            DatabaseMetaData metaData = connection.getMetaData();
+            boolean hasLegacyDate = hasColumn(metaData, tableRecordName, "date");
+            boolean hasDateTime = hasColumn(metaData, tableRecordName, "datetime");
+            if (hasLegacyDate && !hasDateTime) {
+                XConomy.getInstance().logger("升级数据库表格。。。", 0, tableRecordName);
+                String sql = XConomyLoad.DConfig.isPostgreSQL()
+                        ? "alter table " + tableRecordName + " rename column date to datetime"
+                        : "alter table " + tableRecordName + " change column date datetime DATETIME NOT NULL";
+                try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                    statement.executeUpdate();
                 }
-            } catch (SQLException e) {
-                e.printStackTrace();
             }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
             database.closeHikariConnection(connection);
         }
+    }
+
+    private static boolean hasColumn(DatabaseMetaData metaData, String table, String column) throws SQLException {
+        String[] tableNames = {table, table.toLowerCase(), table.toUpperCase()};
+        String[] columnNames = {column, column.toLowerCase(), column.toUpperCase()};
+        for (String tableNameCandidate : tableNames) {
+            for (String columnNameCandidate : columnNames) {
+                try (ResultSet resultSet = metaData.getColumns(null, null, tableNameCandidate, columnNameCandidate)) {
+                    if (resultSet.next()) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 }

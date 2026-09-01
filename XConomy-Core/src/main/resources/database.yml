@@ -1,6 +1,6 @@
 Settings:
-  #SQLite MySQL MariaDB
-  #MariaDB require DatabaseDrivers
+  #SQLite MySQL MariaDB PostgreSQL
+  #MariaDB requires DatabaseDrivers when the driver is not provided by the platform
   storage-type: SQLite
   #Use connection pool or not
   #Require 'slf4j' dependencies
@@ -28,6 +28,21 @@ MySQL:
     encoding: utf8
     timezone: ''
     allowPublicKeyRetrieval: false
+
+
+#PostgreSQL settings
+PostgreSQL:
+  host: localhost
+  port: 5432
+  user: postgres
+  pass: postgres
+  database: data
+  #auto add "_", can use %sign% to indicate Server ID (BungeeCord settings)
+  table-suffix: ''
+  property:
+    usessl: false
+    encoding: UTF-8
+    timezone: ''
 
 
 #Connection pool settings

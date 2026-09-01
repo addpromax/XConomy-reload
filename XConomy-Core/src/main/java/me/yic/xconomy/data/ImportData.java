@@ -19,6 +19,7 @@
 package me.yic.xconomy.data;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 
 public class ImportData{
@@ -27,6 +28,10 @@ public class ImportData{
     }
     @SuppressWarnings("unused")
     public static BigDecimal getBalance(String player, double inb) {
+        return DataFormat.formatdouble(inb);
+    }
+    @SuppressWarnings("unused")
+    public static BigDecimal getBalance(UUID uuid, String player, double inb) {
         return DataFormat.formatdouble(inb);
     }
 }

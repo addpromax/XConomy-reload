@@ -24,6 +24,7 @@ import me.yic.xconomy.data.BalanceMutationResult;
 import me.yic.xconomy.data.BalanceTransferResult;
 import me.yic.xconomy.data.DataFormat;
 import me.yic.xconomy.data.DataLink;
+import me.yic.xconomy.data.DataMigration;
 import me.yic.xconomy.data.GetUUID;
 import me.yic.xconomy.data.caches.Cache;
 import me.yic.xconomy.data.caches.CacheNonPlayer;
@@ -34,7 +35,6 @@ import me.yic.xconomy.utils.UUIDMode;
 
 import java.math.BigDecimal;
 import java.sql.*;
-import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -91,51 +91,23 @@ public class SQL {
 
     }
 
-    public static void createTable() {
-        try {
-            Connection connection = database.getConnectionAndCheck();
-            Statement statement = connection.createStatement();
-
-            if (statement == null) {
-                return;
-            }
-
-            String query1;
-            String query2;
-            String query3 = "create table if not exists " + tableRecordName
-                    + "(id int(20) not null auto_increment, type varchar(50) not null, uid varchar(50) not null, player varchar(50) not null,"
-                    + "balance double(20,2), amount double(20,2) not null, operation varchar(50) not null,"
-                    + " command varchar(255) not null, comment varchar(255) not null, datetime datetime not null,"
-                    + " from_uid varchar(50), to_uid varchar(50), transaction_type varchar(20), server_id varchar(50),"
-                    + " trace_id varchar(50), parent_transaction_id bigint(20),"
-                    + " primary key (id), INDEX idx_uid (uid), INDEX idx_from_uid (from_uid), INDEX idx_to_uid (to_uid),"
-                    + " INDEX idx_datetime (datetime), INDEX idx_transaction_type (transaction_type),"
-                    + " INDEX idx_trace_id (trace_id), INDEX idx_parent_transaction_id (parent_transaction_id)) default charset = " + encoding + ";";
-            String query4 = "create table if not exists " + tableLoginName
-                    + "(UUID varchar(50) not null, last_time datetime not null, " + "primary key (UUID)) default charset = " + encoding + ";";
-
-            String query5;
-            if (XConomyLoad.DConfig.isMySQL()) {
-                query1 = "create table if not exists " + tableName
-                        + "(UID varchar(50) not null, player varchar(50) not null, balance double(20,2) not null, hidden int(5) not null, "
-                        + "primary key (UID)) default charset = " + encoding + ";";
-                query2 = "create table if not exists " + tableNonPlayerName
-                        + "(account varchar(50) not null, balance double(20,2) not null, "
-                        + "primary key (account)) default charset = " + encoding + ";";
-                query5 = "create table if not exists " + tableUUIDName
-                        + "(UUID varchar(50) not null, DUUID varchar(50) not null, " +
-                        "primary key (UUID)) default charset = " + encoding + ";";
-            } else {
-                query1 = "create table if not exists " + tableName
-                        + "(UID varchar(50) not null, player varchar(50) not null, balance double(20,2) not null, hidden int(5) not null, "
-                        + "primary key (UID));";
-                query2 = "create table if not exists " + tableNonPlayerName
-                        + "(account varchar(50) not null, balance double(20,2) not null, "
-                        + "primary key (account));";
-                query5 = "create table if not exists " + tableUUIDName
-                        + "(UUID varchar(50) not null, DUUID varchar(50) not null, " +
-                        "primary key (UUID));";
-            }
+    public static boolean createTable() {
+        Connection connection = database.getConnectionAndCheck();
+        if (connection == null) {
+            return false;
+        }
+        try (Statement statement = connection.createStatement()) {
+            boolean postgres = XConomyLoad.DConfig.isPostgreSQL();
+            String textType = postgres ? "VARCHAR(50)" : "varchar(50)";
+            String balanceType = postgres ? "DOUBLE PRECISION" : "double(20,2)";
+            String intType = postgres ? "INTEGER" : "int(5)";
+            String query1 = "CREATE TABLE IF NOT EXISTS " + tableName
+                    + " (UID " + textType + " NOT NULL, player " + textType + " NOT NULL, balance "
+                    + balanceType + " NOT NULL, hidden " + intType + " NOT NULL, PRIMARY KEY (UID))";
+            String query2 = "CREATE TABLE IF NOT EXISTS " + tableNonPlayerName
+                    + " (account " + textType + " NOT NULL, balance " + balanceType + " NOT NULL, PRIMARY KEY (account))";
+            String query5 = "CREATE TABLE IF NOT EXISTS " + tableUUIDName
+                    + " (UUID " + textType + " NOT NULL, DUUID " + textType + " NOT NULL, PRIMARY KEY (UUID))";
 
             statement.executeUpdate(query1);
             if (DataLink.hasnonplayerplugin || XConomyLoad.Config.NON_PLAYER_ACCOUNT) {
@@ -144,22 +116,46 @@ public class SQL {
             if (XConomyLoad.Config.UUIDMODE.equals(UUIDMode.SEMIONLINE)) {
                 statement.executeUpdate(query5);
             }
-            if (XConomyLoad.DConfig.isMySQL() && XConomyLoad.Config.TRANSACTION_RECORD) {
+            if (XConomyLoad.DConfig.isRemoteDatabase() && XConomyLoad.Config.TRANSACTION_RECORD) {
+                String idType = postgres ? "BIGINT GENERATED BY DEFAULT AS IDENTITY" : "BIGINT AUTO_INCREMENT";
+                String dateType = postgres ? "TIMESTAMP" : "DATETIME";
+                String query3 = "CREATE TABLE IF NOT EXISTS " + tableRecordName
+                        + " (id " + idType + " PRIMARY KEY, type " + textType + " NOT NULL, uid " + textType + " NOT NULL,"
+                        + " player " + textType + " NOT NULL, balance " + balanceType + ", amount " + balanceType + " NOT NULL,"
+                        + " operation " + textType + " NOT NULL, command VARCHAR(255) NOT NULL, comment VARCHAR(255) NOT NULL,"
+                        + " datetime " + dateType + " NOT NULL, from_uid " + textType + ", to_uid " + textType
+                        + ", transaction_type VARCHAR(20), server_id " + textType + ", trace_id " + textType
+                        + ", parent_transaction_id BIGINT)";
                 statement.executeUpdate(query3);
+                createRecordIndexes(statement, postgres);
                 if (XConomyLoad.Config.PAY_TIPS) {
-                    statement.executeUpdate(query4);
+                    statement.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableLoginName
+                            + " (UUID " + textType + " NOT NULL, last_time " + dateType + " NOT NULL, PRIMARY KEY (UUID))");
                 }
             }
-            statement.close();
-            database.closeHikariConnection(connection);
-
-            // Upgrade table for tracking if needed
-            if (XConomyLoad.isTransactionTrackingEnabled()) {
-                upgradeRecordTableForTracking();
-            }
-
+            return true;
         } catch (SQLException e) {
             e.printStackTrace();
+            return false;
+        } finally {
+            database.closeHikariConnection(connection);
+        }
+    }
+
+    private static void createRecordIndexes(Statement statement, boolean postgres) throws SQLException {
+        String[] indexes = {"uid", "from_uid", "to_uid", "datetime", "transaction_type", "trace_id", "parent_transaction_id"};
+        for (String column : indexes) {
+            String indexName = postgres
+                    ? "idx_" + Integer.toHexString(tableRecordName.hashCode()) + "_" + column
+                    : "idx_" + column;
+            String sql = postgres
+                    ? "CREATE INDEX IF NOT EXISTS " + indexName + " ON " + tableRecordName + " (" + column + ")"
+                    : "CREATE INDEX " + indexName + " ON " + tableRecordName + " (" + column + ")";
+            try {
+                statement.executeUpdate(sql);
+            } catch (SQLException ignored) {
+                // MySQL may already have the index from an earlier schema version.
+            }
         }
     }
 
@@ -167,45 +163,49 @@ public class SQL {
      * Upgrade existing record table to add tracking fields
      */
     public static void upgradeRecordTableForTracking() {
-        try {
-            Connection connection = database.getConnectionAndCheck();
-            
-            // Check if columns already exist
-            ResultSet rs = connection.getMetaData().getColumns(null, null, tableRecordName, "from_uid");
-            boolean hasFromUid = rs.next();
-            rs.close();
-
-            if (!hasFromUid) {
-                Statement statement = connection.createStatement();
-                
-                // Add new columns
-                statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD COLUMN from_uid varchar(50)");
-                statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD COLUMN to_uid varchar(50)");
-                statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD COLUMN transaction_type varchar(20)");
-                statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD COLUMN server_id varchar(50)");
-                statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD COLUMN trace_id varchar(50)");
-                statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD COLUMN parent_transaction_id bigint(20)");
-                
-                // Add indexes
-                try {
-                    statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD INDEX idx_from_uid (from_uid)");
-                    statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD INDEX idx_to_uid (to_uid)");
-                    statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD INDEX idx_transaction_type (transaction_type)");
-                    statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD INDEX idx_trace_id (trace_id)");
-                    statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD INDEX idx_parent_transaction_id (parent_transaction_id)");
-                } catch (SQLException ignored) {
-                    // Indexes might already exist
+        Connection connection = database.getConnectionAndCheck();
+        if (connection == null) {
+            return;
+        }
+        try (Statement statement = connection.createStatement()) {
+            DatabaseMetaData metaData = connection.getMetaData();
+            String[][] columns = {
+                    {"from_uid", "VARCHAR(50)"}, {"to_uid", "VARCHAR(50)"},
+                    {"transaction_type", "VARCHAR(20)"}, {"server_id", "VARCHAR(50)"},
+                    {"trace_id", "VARCHAR(50)"}, {"parent_transaction_id", "BIGINT"}
+            };
+            boolean upgraded = false;
+            for (String[] column : columns) {
+                if (!columnExists(metaData, tableRecordName, column[0])) {
+                    statement.executeUpdate("ALTER TABLE " + tableRecordName + " ADD COLUMN " + column[0] + " " + column[1]);
+                    upgraded = true;
                 }
-                
-                statement.close();
+            }
+            createRecordIndexes(statement, XConomyLoad.DConfig.isPostgreSQL());
+            if (upgraded) {
                 XConomy.getInstance().logger(null, 0, "Upgraded transaction record table for tracking");
             }
-            
-            database.closeHikariConnection(connection);
         } catch (SQLException e) {
             XConomy.getInstance().logger(null, 1, "Error upgrading record table");
             e.printStackTrace();
+        } finally {
+            database.closeHikariConnection(connection);
         }
+    }
+
+    private static boolean columnExists(DatabaseMetaData metaData, String table, String column) throws SQLException {
+        String[] tableNames = {table, table.toLowerCase(), table.toUpperCase()};
+        String[] columnNames = {column, column.toLowerCase(), column.toUpperCase()};
+        for (String tableNameCandidate : tableNames) {
+            for (String columnNameCandidate : columnNames) {
+                try (ResultSet resultSet = metaData.getColumns(null, null, tableNameCandidate, columnNameCandidate)) {
+                    if (resultSet.next()) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     public static PlayerData getPlayerData(UUID uuid) {
@@ -214,7 +214,9 @@ public class SQL {
             Connection connection = database.getConnectionAndCheck();
             String sql = "select * from " + tableName + " where UID = ?";
             if (XConomyLoad.Config.UUIDMODE.equals(UUIDMode.SEMIONLINE)) {
-                sql = "select * from " + tableName + " where UID = ifnull((select DUUID from " + tableUUIDName + " where UUID = ?), ?)";
+                String fallback = XConomyLoad.DConfig.isPostgreSQL() ? "COALESCE" : "ifnull";
+                sql = "select * from " + tableName + " where UID = " + fallback
+                        + "((select DUUID from " + tableUUIDName + " where UUID = ?), ?)";
             }
             PreparedStatement statement = connection.prepareStatement(sql);
             statement.setString(1, uuid.toString());
@@ -252,10 +254,12 @@ public class SQL {
             String query;
 
             if (XConomyLoad.Config.USERNAME_IGNORE_CASE) {
-                if (XConomyLoad.DConfig.isMySQL()) {
-                    query = "select * from " + tableName + " where player = ?";
-                } else {
+                if (XConomyLoad.DConfig.getStorageType() == 1) {
                     query = "select * from " + tableName + " where player = ? COLLATE NOCASE";
+                } else if (XConomyLoad.DConfig.isPostgreSQL()) {
+                    query = "select * from " + tableName + " where LOWER(player) = LOWER(?)";
+                } else {
+                    query = "select * from " + tableName + " where player = ?";
                 }
             } else {
                 if (XConomyLoad.DConfig.isMySQL()) {
@@ -328,7 +332,13 @@ public class SQL {
     }
 
     public static BalanceMutationResult save(PlayerData pd, Boolean isAdd, BigDecimal amount, RecordInfo ri) {
+        if (DataMigration.isRunning()) {
+            return BalanceMutationResult.failure(BalanceMutationResult.Status.DATABASE_ERROR, pd.getBalance());
+        }
         synchronized (WRITE_LOCK) {
+            if (DataMigration.isRunning()) {
+                return BalanceMutationResult.failure(BalanceMutationResult.Status.DATABASE_ERROR, pd.getBalance());
+            }
             Connection connection = database.getConnectionAndCheck();
             if (connection == null) {
                 return BalanceMutationResult.failure(BalanceMutationResult.Status.DATABASE_ERROR, pd.getBalance());
@@ -382,7 +392,7 @@ public class SQL {
                 }
 
                 PlayerData recordData = new PlayerData(pd.getUniqueId(), pd.getName(), newBalance);
-                Long transactionId = record(connection, recordData, isAdd, amount, newBalance, ri,
+                Long transactionId = recordStrict(connection, recordData, isAdd, amount, newBalance, ri,
                         ri.getFromUid(), ri.getToUid(), ri.getTransactionType());
                 connection.commit();
                 return BalanceMutationResult.success(newBalance, transactionId);
@@ -400,7 +410,15 @@ public class SQL {
     public static BalanceTransferResult transfer(PlayerData sender, PlayerData target,
                                                  BigDecimal senderAmount, BigDecimal targetAmount,
                                                  RecordInfo senderRecord, RecordInfo targetRecord) {
+        if (DataMigration.isRunning()) {
+            return BalanceTransferResult.failure(BalanceMutationResult.Status.DATABASE_ERROR,
+                    sender.getBalance(), target.getBalance());
+        }
         synchronized (WRITE_LOCK) {
+            if (DataMigration.isRunning()) {
+                return BalanceTransferResult.failure(BalanceMutationResult.Status.DATABASE_ERROR,
+                        sender.getBalance(), target.getBalance());
+            }
             Connection connection = database.getConnectionAndCheck();
             if (connection == null) {
                 return BalanceTransferResult.failure(BalanceMutationResult.Status.DATABASE_ERROR,
@@ -442,10 +460,10 @@ public class SQL {
 
                 PlayerData senderData = new PlayerData(sender.getUniqueId(), sender.getName(), senderBalance);
                 PlayerData targetData = new PlayerData(target.getUniqueId(), target.getName(), targetBalance);
-                Long senderTransactionId = record(connection, senderData, false, senderAmount, senderBalance,
+                Long senderTransactionId = recordStrict(connection, senderData, false, senderAmount, senderBalance,
                         senderRecord, senderRecord.getFromUid(), senderRecord.getToUid(),
                         senderRecord.getTransactionType());
-                Long targetTransactionId = record(connection, targetData, true, targetAmount, targetBalance,
+                Long targetTransactionId = recordStrict(connection, targetData, true, targetAmount, targetBalance,
                         targetRecord, targetRecord.getFromUid(), targetRecord.getToUid(),
                         targetRecord.getTransactionType());
 
@@ -568,6 +586,9 @@ public class SQL {
 
     public static void saveall(String targettype, List<UUID> players, BigDecimal amount, Boolean isAdd,
                                RecordInfo ri) {
+        if (DataMigration.isRunning()) {
+            return;
+        }
         if (targettype.equalsIgnoreCase("online") && (players == null || players.isEmpty())) {
             return;
         }
@@ -612,6 +633,9 @@ public class SQL {
 
     public static void saveNonPlayer(String account, BigDecimal amount,
                                      BigDecimal newbalance, Boolean isAdd, RecordInfo ri) {
+        if (DataMigration.isRunning()) {
+            return;
+        }
         Connection connection = database.getConnectionAndCheck();
         try {
             String query = " set balance = ? where account = ?";
@@ -642,6 +666,9 @@ public class SQL {
 
 
     public static void deletePlayerData(String UUID) {
+        if (DataMigration.isRunning()) {
+            return;
+        }
         Connection connection = database.getConnectionAndCheck();
         try {
             String query = "delete from " + tableName + " where UID = ?";
@@ -730,83 +757,69 @@ public class SQL {
     public static Long record(Connection co, PlayerData pd, Boolean isAdd,
                               BigDecimal amount, BigDecimal newbalance, RecordInfo ri,
                               UUID fromUid, UUID toUid, String transactionType) {
-        if (XConomyLoad.DConfig.isMySQL() && XConomyLoad.Config.TRANSACTION_RECORD) {
-            String uid = "N/A";
-            String name = "N/A";
-            String operation;
-            if (pd != null) {
-                if (pd.getUniqueId() != null) {
-                    uid = pd.getUniqueId().toString();
-                }
-                name = pd.getName();
-            }
-            if (isAdd != null) {
-                if (isAdd) {
-                    operation = "DEPOSIT";
+        try {
+            return recordStrict(co, pd, isAdd, amount, newbalance, ri, fromUid, toUid, transactionType);
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private static Long recordStrict(Connection co, PlayerData pd, Boolean isAdd,
+                                     BigDecimal amount, BigDecimal newbalance, RecordInfo ri,
+                                     UUID fromUid, UUID toUid, String transactionType) throws SQLException {
+        if (!XConomyLoad.DConfig.isRemoteDatabase() || !XConomyLoad.Config.TRANSACTION_RECORD) {
+            return null;
+        }
+        String uid = pd != null && pd.getUniqueId() != null ? pd.getUniqueId().toString() : "N/A";
+        String name = pd != null ? pd.getName() : "N/A";
+        String operation = isAdd == null ? "SET" : (isAdd ? "DEPOSIT" : "WITHDRAW");
+        Timestamp timestamp = new Timestamp(new Date().getTime());
+
+        if (XConomyLoad.isTransactionTrackingEnabled()) {
+            String query = "INSERT INTO " + tableRecordName
+                    + "(type,uid,player,balance,amount,operation,command,comment,datetime,from_uid,to_uid,"
+                    + "transaction_type,server_id,trace_id,parent_transaction_id) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            try (PreparedStatement statement = co.prepareStatement(query, PreparedStatement.RETURN_GENERATED_KEYS)) {
+                statement.setString(1, ri.getType());
+                statement.setString(2, uid);
+                statement.setString(3, name);
+                statement.setBigDecimal(4, newbalance);
+                statement.setBigDecimal(5, amount);
+                statement.setString(6, operation);
+                statement.setString(7, ri.getCommand());
+                statement.setString(8, ri.getComment());
+                statement.setTimestamp(9, timestamp);
+                statement.setString(10, fromUid != null ? fromUid.toString() : "N/A");
+                statement.setString(11, toUid != null ? toUid.toString() : "N/A");
+                statement.setString(12, transactionType != null ? transactionType : "UNKNOWN");
+                statement.setString(13, XConomyLoad.Config.SYNCDATA_SIGN);
+                statement.setString(14, ri.getTraceId());
+                if (ri.getParentTransactionId() != null) {
+                    statement.setLong(15, ri.getParentTransactionId());
                 } else {
-                    operation = "WITHDRAW";
+                    statement.setNull(15, Types.BIGINT);
                 }
-            } else {
-                operation = "SET";
-            }
-            try {
-                String query;
-                Date dd = new Date();
-                String sd = (new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")).format(dd);
-                Long insertedId = null;
-                
-                if (XConomyLoad.isTransactionTrackingEnabled()) {
-                    query = "INSERT INTO " + tableRecordName + "(type,uid,player,balance,amount,operation,command,comment,datetime,from_uid,to_uid,transaction_type,server_id,trace_id,parent_transaction_id) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-                    PreparedStatement statement = co.prepareStatement(query, PreparedStatement.RETURN_GENERATED_KEYS);
-                    statement.setString(1, ri.getType());
-                    statement.setString(2, uid);
-                    statement.setString(3, name);
-                    statement.setDouble(4, newbalance.doubleValue());
-                    statement.setDouble(5, amount.doubleValue());
-                    statement.setString(6, operation);
-                    statement.setString(7, ri.getCommand());
-                    statement.setString(8, ri.getComment());
-                    statement.setString(9, sd);
-                    statement.setString(10, fromUid != null ? fromUid.toString() : "N/A");
-                    statement.setString(11, toUid != null ? toUid.toString() : "N/A");
-                    statement.setString(12, transactionType != null ? transactionType : "UNKNOWN");
-                    statement.setString(13, XConomyLoad.Config.SYNCDATA_SIGN);
-                    statement.setString(14, ri.getTraceId());
-                    if (ri.getParentTransactionId() != null) {
-                        statement.setLong(15, ri.getParentTransactionId());
-                    } else {
-                        statement.setNull(15, java.sql.Types.BIGINT);
-                    }
-                    statement.executeUpdate();
-                    
-                    // Get inserted ID
-                    ResultSet generatedKeys = statement.getGeneratedKeys();
-                    if (generatedKeys.next()) {
-                        insertedId = generatedKeys.getLong(1);
-                    }
-                    generatedKeys.close();
-                    statement.close();
-                    return insertedId;
-                } else {
-                    query = "INSERT INTO " + tableRecordName + "(type,uid,player,balance,amount,operation,command,comment,datetime) values(?,?,?,?,?,?,?,?,?)";
-                    PreparedStatement statement = co.prepareStatement(query);
-                    statement.setString(1, ri.getType());
-                    statement.setString(2, uid);
-                    statement.setString(3, name);
-                    statement.setDouble(4, newbalance.doubleValue());
-                    statement.setDouble(5, amount.doubleValue());
-                    statement.setString(6, operation);
-                    statement.setString(7, ri.getCommand());
-                    statement.setString(8, ri.getComment());
-                    statement.setString(9, sd);
-                    statement.executeUpdate();
-                    statement.close();
-                    return null;
+                statement.executeUpdate();
+                try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
+                    return generatedKeys.next() ? generatedKeys.getLong(1) : null;
                 }
-            } catch (SQLException e) {
-                e.printStackTrace();
-                return null;
             }
+        }
+
+        String query = "INSERT INTO " + tableRecordName
+                + "(type,uid,player,balance,amount,operation,command,comment,datetime) values(?,?,?,?,?,?,?,?,?)";
+        try (PreparedStatement statement = co.prepareStatement(query)) {
+            statement.setString(1, ri.getType());
+            statement.setString(2, uid);
+            statement.setString(3, name);
+            statement.setBigDecimal(4, newbalance);
+            statement.setBigDecimal(5, amount);
+            statement.setString(6, operation);
+            statement.setString(7, ri.getCommand());
+            statement.setString(8, ri.getComment());
+            statement.setTimestamp(9, timestamp);
+            statement.executeUpdate();
         }
         return null;
     }

@@ -62,15 +62,26 @@ public class DataLink{
                 SQLSetup.setupMySqlTable();
                 break;
 
+            case 4:
+                XConomy.getInstance().logger("数据保存方式", 0, " - PostgreSQL");
+                SQLSetup.setupMySqlTable();
+                break;
+
         }
 
         if (SQL.con()) {
-            if (XConomyLoad.DConfig.getStorageType() == 2 || XConomyLoad.DConfig.getStorageType() == 3) {
+            if (XConomyLoad.DConfig.isRemoteDatabase()) {
                 SQL.getwaittimeout();
             }
-            SQL.createTable();
+            if (!SQL.createTable()) {
+                XConomy.getInstance().logger(null, 1, "数据库表创建失败，插件停止加载");
+                return false;
+            }
             SQLUpdateTable.updataTable();
             SQLUpdateTable.updataTable_record();
+            if (XConomyLoad.isTransactionTrackingEnabled()) {
+                SQL.upgradeRecordTableForTracking();
+            }
             XConomyLoad.DConfig.loggersysmess("连接正常");
         } else {
             XConomyLoad.DConfig.loggersysmess("连接异常");

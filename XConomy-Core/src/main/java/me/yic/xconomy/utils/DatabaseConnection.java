@@ -56,11 +56,16 @@ public class DatabaseConnection {
         hikari.setMaximumPoolSize(maxPoolSize);
         hikari.setMinimumIdle(minIdle);
         hikari.setMaxLifetime(maxLife);
-        hikari.addDataSourceProperty("cachePrepStmts", "true");
-        hikari.addDataSourceProperty("prepStmtCacheSize", "250");
-        hikari.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
-        hikari.addDataSourceProperty("userServerPrepStmts", "true");
-        if (XConomyLoad.DDrivers || XConomy.version.equals("Sponge8")) {
+        if (XConomyLoad.DConfig.isMySQL()) {
+            hikari.addDataSourceProperty("cachePrepStmts", "true");
+            hikari.addDataSourceProperty("prepStmtCacheSize", "250");
+            hikari.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+            hikari.addDataSourceProperty("userServerPrepStmts", "true");
+        }
+        if (XConomyLoad.DConfig.isPostgreSQL()) {
+            // Paper 最终包会过滤 JDBC 服务注册文件，必须显式指定驱动类。
+            hikari.setDriverClassName("org.postgresql.Driver");
+        } else if (XConomyLoad.DDrivers || XConomy.version.equals("Sponge8")) {
             hikari.setDriverClassName(driver);
         }
         if (hikari.getMinimumIdle() < hikari.getMaximumPoolSize()) {
@@ -72,8 +77,9 @@ public class DatabaseConnection {
 
     public void setHikariValidationTimeout() {
         if (XConomyLoad.DConfig.EnableConnectionPool) {
-            if (hikari.getValidationTimeout() > waittimeout) {
-                hikari.setValidationTimeout(waittimeout);
+            long validationTimeout = Math.max(250L, waittimeout * 1000L);
+            if (hikari.getValidationTimeout() > validationTimeout) {
+                hikari.setValidationTimeout(validationTimeout);
             }
         }
     }
@@ -90,6 +96,9 @@ public class DatabaseConnection {
                         break;
                     case 3:
                         driver = ("me.yic.libs.mariadb.jdbc.Driver");
+                        break;
+                    case 4:
+                        driver = ("org.postgresql.Driver");
                         break;
                 }
             } else {
@@ -109,10 +118,17 @@ public class DatabaseConnection {
                     case 3:
                         driver = ("org.mariadb.jdbc.Driver");
                         break;
+                    case 4:
+                        driver = ("org.postgresql.Driver");
+                        break;
                 }
             }
-        }else if (XConomy.version.equals("Sponge7")) {
-            driver = ("org.spongepowered.api.service.sql.SqlService");
+        } else if (XConomy.version.equals("Sponge7")) {
+            if (XConomyLoad.DConfig.isPostgreSQL()) {
+                driver = "org.postgresql.Driver";
+            } else {
+                driver = "org.spongepowered.api.service.sql.SqlService";
+            }
         }
     }
 
@@ -132,7 +148,14 @@ public class DatabaseConnection {
                         break;
                     case 2:
                     case 3:
-                        connection = DriverManager.getConnection(url, XConomyLoad.DConfig.getuser(), XConomyLoad.DConfig.getpass());
+                    case 4:
+                        try (Connection testConnection = DriverManager.getConnection(
+                                url, XConomyLoad.DConfig.getuser(), XConomyLoad.DConfig.getpass())) {
+                            if (!testConnection.isValid(waittimeout)) {
+                                return false;
+                            }
+                        }
+                        connection = null;
                         break;
                 }
             }
@@ -181,6 +204,8 @@ public class DatabaseConnection {
     public Connection getConnection() throws SQLException {
         if (XConomyLoad.DConfig.EnableConnectionPool) {
             return hikari.getConnection();
+        } else if (XConomyLoad.DConfig.isRemoteDatabase()) {
+            return DriverManager.getConnection(url, XConomyLoad.DConfig.getuser(), XConomyLoad.DConfig.getpass());
         } else {
             return connection;
         }
@@ -199,19 +224,11 @@ public class DatabaseConnection {
                 }
 
             } else {
-                if (connection == null) {
-                    return setGlobalConnection();
+                if (XConomyLoad.DConfig.isRemoteDatabase()) {
+                    return true;
                 }
-
-                if (connection.isClosed()) {
+                if (connection == null || connection.isClosed()) {
                     return setGlobalConnection();
-                }
-
-                if (XConomyLoad.DConfig.getStorageType() == 2) {
-                    if (!connection.isValid(waittimeout)) {
-                        secon = false;
-                        return setGlobalConnection();
-                    }
                 }
             }
         } catch (SQLException e) {
@@ -222,10 +239,12 @@ public class DatabaseConnection {
     }
 
     public void closeHikariConnection(Connection connection) {
-        if (!XConomyLoad.DConfig.EnableConnectionPool) {
+        if (connection == null) {
             return;
         }
-
+        if (!XConomyLoad.DConfig.EnableConnectionPool && !XConomyLoad.DConfig.isRemoteDatabase()) {
+            return;
+        }
         try {
             connection.close();
         } catch (SQLException e) {
